@@ -1,0 +1,30 @@
+#!/bin/sh
+
+DBDIR=.ntdedup
+
+if mkdir "$DBDIR"; then
+    true
+else
+    echo "Try removing it." >&2
+    exit 1
+fi
+
+
+find -type f -exec sha1sum '{}' ';' | (
+    while read line; do
+        hash=`echo $line | cut -d ' ' -f 1`
+        file=`echo $line | cut -d ' ' -f 2`
+        if test -e "$DBDIR/$hash"; then
+            origfile=`cat "$DBDIR/$hash"`
+            if cmp "$origfile" "$file"; then
+                ln -vf "$origfile" "$file"
+            else
+                echo "YOU WIN THE HASH COLLISION" >2&
+            fi
+        else
+            echo "$file" > "$DBDIR/$hash"
+        fi
+    done
+)
+
+rm -rf "$DBDIR"
