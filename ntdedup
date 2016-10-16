@@ -16,7 +16,7 @@ ntdedup_inode() {
 
 ntdedup_run() {
     find -type f | (
-        while read file; do
+        while read -r file; do
             hash=`ntdedup_hash "$file"`
             hashfile="$DBDIR/$hash"
             if [ -e "$hashfile" ]; then
@@ -44,7 +44,7 @@ ntdedup_run() {
 ntdedup_check () {
     if [ -e "$DBDIR" ] ; then
         find "$DBDIR" -type f | (
-        while read file; do
+        while read -r file; do
             hash=`basename "$file"`
             rehash=`ntdedup_hash "$file"`
             if [ "$hash" != "$rehash" ]; then
