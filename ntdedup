@@ -1,30 +1,68 @@
-#!/bin/sh
+#!/bin/sh -e
 
 DBDIR=.ntdedup
 
-if mkdir "$DBDIR"; then
-    true
-else
-    echo "Try removing it." >&2
-    exit 1
-fi
+HASH_CMD=sha1sum
 
+mkdir -p "$DBDIR"
 
-find -type f -exec sha1sum '{}' ';' | (
-    while read line; do
-        hash=`echo $line | cut -d ' ' -f 1`
-        file=`echo $line | cut -d ' ' -f 2`
-        if test -e "$DBDIR/$hash"; then
-            origfile=`cat "$DBDIR/$hash"`
-            if cmp "$origfile" "$file"; then
-                ln -vf "$origfile" "$file"
+ntdedup_hash() {
+    ${HASH_CMD} "$1" | cut -d ' ' -f 1
+}
+
+ntdedup_inode() {
+    ls -i "$1" | cut -d ' ' -f 1
+}
+
+ntdedup_run() {
+    find -type f | (
+        while read file; do
+            hash=`ntdedup_hash "$file"`
+            hashfile="$DBDIR/$hash"
+            if [ -e "$hashfile" ]; then
+                i_file=`ntdedup_inode "$file"`
+                i_hash=`ntdedup_inode "$hashfile"`
+                # check if inodes already match
+                if [ "$i_file" != "$i_hash" ]; then
+                    # verify contents
+                    if cmp "$hashfile" "$file"; then
+                        ln -vf "$hashfile" "$file";
+                    else
+                        # This is extremely unlikely and we give up
+                        >&2 echo "HASH COLLISION: $file"
+                        exit 1
+                    fi
+                fi
             else
-                echo "YOU WIN THE HASH COLLISION" >2&
+                # add to the hashed database
+                ln "$file" "$hashfile"
             fi
-        else
-            echo "$file" > "$DBDIR/$hash"
-        fi
-    done
-)
+        done
+    )
+}
 
-rm -rf "$DBDIR"
+ntdedup_check () {
+    if [ -e "$DBDIR" ] ; then
+        find "$DBDIR" -type f | (
+        while read file; do
+            hash=`basename "$file"`
+            rehash=`ntdedup_hash "$file"`
+            if [ "$hash" != "$rehash" ]; then
+                >&2 echo "FAILED: $file"
+            fi
+        done
+        )
+    fi
+}
+
+case "$1" in
+    run)
+        ntdedup_run
+        ;;
+    check)
+        ntdedup_check
+        ;;
+    *)
+        >&2 echo "Unknown command"
+        ;;
+esac
